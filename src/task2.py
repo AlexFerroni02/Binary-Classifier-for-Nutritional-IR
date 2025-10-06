@@ -51,16 +51,20 @@ for pmid in sampled_pmids:
         # Extract Title
         title_el = article.find(".//ArticleTitle")
         title = title_el.text if title_el is not None else None
-        
+
         # Extract Abstract (concatenate parts if multiple sections)
         abstract_elems = article.findall(".//AbstractText")
-        abstract = " ".join([a.text for a in abstract_elems if a.text]) if abstract_elems else None
+        if abstract_elems:  # controlla che esista almeno un abstract
+            abstract = " ".join([a.text for a in abstract_elems if a.text])
+        else:
+            abstract = None  # se non c’è, salviamo None
         
         results.append({
             "Title": title,
             "PMID": pmid,
             "Abstract": abstract
         })
+
     i = i+1
     print(i,"\n")
     time.sleep(0.4)  # avoid overloading NCBI servers
@@ -71,7 +75,7 @@ df.to_excel("non_relevant_publications.xlsx", index=False)
 
 print("done")
 
-df1 = pd.read_excel("publications_with_abstracts.xlsx")
+df1 = pd.read_excel("publications_with_all_abstracts.xlsx")
 df2 = pd.read_excel("non_relevant_publications.xlsx")
 
 combined_df = pd.concat([df1, df2], ignore_index=True)
