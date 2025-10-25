@@ -1,0 +1,4 @@
+- Accuracy sul Test Set: 0.7259
+- F1-score sul Test Set: 0.7823
+- Precision sul Test Set: 0.6467
+- Recall sul Test Set: 0.9898 
