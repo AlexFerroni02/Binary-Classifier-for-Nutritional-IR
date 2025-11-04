@@ -1,84 +1,142 @@
 import pandas as pd
 import requests
 import time
-import re
-from difflib import get_close_matches
- 
+import xml.etree.ElementTree as ET
+import difflib
+import os
 
-file_path = "publications.xlsx"
-df = pd.read_excel(file_path)
+def format_first_author(authors):
+    if not isinstance(authors, str) or not authors.strip():
+        return None
+    first_author = authors.split(",")[0].strip()
+    first_author_formatted = first_author.replace('.', '').replace('  ', ' ')
+    return first_author_formatted
 
-titles = df['title'].tolist()
+def esearch(term):
+    url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+    params = {"db": "pubmed", "term": term, "retmode": "xml"}
+    response = requests.get(url, params=params)
+    if response.status_code == 200 and response.text.startswith('<?xml'):
+        return response.text
+    return None
 
-# URLs for search and fetch
-esearch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
-efetch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+def fetch_title_from_pmid(pmid):
+    efetch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+    params = {"db": "pubmed", "id": pmid, "retmode": "xml"}
+    response = requests.get(efetch_url, params=params)
+    if response.status_code != 200:
+        return None
+    try:
+        root = ET.fromstring(response.text)
+        title = root.findtext(".//ArticleTitle")
+        return title
+    except ET.ParseError:
+        return None
 
-results = []
-pmid_vector = []
+def is_title_similar(original_title, fetched_title, threshold=0.9):
+    if not (original_title and fetched_title):
+        return False
+    ratio = difflib.SequenceMatcher(None, original_title.lower(), fetched_title.lower()).ratio()
+    return ratio >= threshold
 
-for title in titles:
-    # We remove the symbols so as to be more elastic
-    clean_title = re.sub(r'[^\w\s]', '', title)
-    
-    # ESearch
-    esearch_params = {
-        "db": "pubmed",
-        "term": f"{clean_title}[Title/Abstract]",  # search in title OR abstract to be more flexible
-        "retmode": "json"
-    }
-    esearch_response = requests.get(esearch_url, params=esearch_params)
-    esearch_data = esearch_response.json()
-    
-    pmid_list = esearch_data.get("esearchresult", {}).get("idlist", [])
-    
-    if not pmid_list:
-        print(f"No PMID found for: {title}")
-        results.append({"Title": title, "PMID": None, "Abstract": None})
-        pmid_vector.append(0)
-        continue
-    
-    # Get titles of the first 5 articles to check them
-    pmid = pmid_list[0]
-    efetch_params = {
-        "db": "pubmed",
-        "id": ",".join(pmid_list[:5]),  
-        "retmode": "xml"
-    }
-    efetch_response = requests.get(efetch_url, params=efetch_params)
-    xml_text = efetch_response.text
-    
-    # Extract titles with parsing
-    article_titles = re.findall(r'<ArticleTitle>(.*?)</ArticleTitle>', xml_text)
-    
-    # Find closest match
-    best_match = get_close_matches(clean_title, article_titles, n=1)
-    if best_match:
-        # Extract PMID of best match
-        idx = article_titles.index(best_match[0])
-        pmid = pmid_list[idx]
-    else:
-        best_match = [title]
-    
-    # EFetch
-    efetch_params = {
+def try_pubmed_queries(title, authors=None, year=None):
+    queries = [f'"{title}"[Title]']
+    if authors and year:
+        queries.append(f'"{title}"[Title] OR ({authors}[Author] AND {year}[Date - Publication])')
+    queries.append(title)
+
+    for q in queries:
+        xml_text = esearch(q)
+        if xml_text:
+            try:
+                root = ET.fromstring(xml_text)
+                id_nodes = root.findall(".//Id")
+                for pmid_node in id_nodes:
+                    pmid = pmid_node.text
+                    fetched_title = fetch_title_from_pmid(pmid)
+                    if is_title_similar(title, fetched_title):
+                        return pmid
+            except ET.ParseError:
+                continue
+    return None
+
+def get_abstract_xml(pmid):
+    efetch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+    params = {
         "db": "pubmed",
         "id": pmid,
-        "retmode": "text",
-        "rettype": "abstract"
+        "retmode": "xml",
     }
-    efetch_response = requests.get(efetch_url, params=efetch_params)
-    abstract_text = efetch_response.text.strip()
-    
-    results.append({"Title": title, "PMID": pmid, "Abstract": abstract_text})
-    pmid_vector.append(pmid)
+    response = requests.get(efetch_url, params=params)
+    return response.text if response.status_code == 200 and response.text.startswith('<?xml') else None
 
-    print(f"PMID {pmid} for: {title}")
-    
-    # The database doesnt like more than 3 requests/s
-    time.sleep(0.4)
+def extract_abstract_from_xml(xml_text):
+    if not xml_text:
+        return None
+    try:
+        root = ET.fromstring(xml_text)
+        abstract = root.findtext(".//AbstractText")
+        return abstract.strip() if abstract else None
+    except ET.ParseError:
+        return None
 
-# Output
-output_df = pd.DataFrame(results)
-output_df.to_excel("publications_with_abstracts.xlsx", index=False)
-print("Done, file saved as 'publications_with_abstracts.xlsx'.")
+def main():
+    input_file = "../data/publications.xlsx"
+    output_file = "../data/abstracts.xlsx"
+    df = pd.read_excel(input_file)
+
+    # Carica indici già processati se il file esiste
+    processed_indices = set()
+    if os.path.exists(output_file):
+        try:
+            df_existing = pd.read_csv(output_file)
+            processed_indices = set(df_existing['indice'])
+            print(f"Trovati {len(processed_indices)} articoli già processati.")
+        except Exception:
+            pass
+
+    results_batch = []
+    save_interval = 100
+
+    for idx, row in df.iterrows():
+        if idx in processed_indices:
+            continue
+
+        title = row.get("title", "").strip()
+        authors = format_first_author(row.get("authors", ""))
+        year = str(row.get("year_of_publication", "")).strip()
+
+        pmid = try_pubmed_queries(title, authors, year)
+        abstract = None
+        if pmid:
+            abstract_xml = get_abstract_xml(pmid)
+            abstract = extract_abstract_from_xml(abstract_xml)
+
+        print(f"Iterazione {idx}")
+
+        results_batch.append({
+            "title": title,
+            "pmid": pmid if pmid else "NA",
+            "abstract": abstract if abstract else "NA",
+            "indice": idx
+        })
+        time.sleep(0.4)
+
+        # Salva ogni 100
+        if len(results_batch) >= save_interval:
+            print(f"Salvo {len(results_batch)} risultati su CSV...")
+            header = not os.path.exists(output_file)
+            pd.DataFrame(results_batch).to_excel(output_file, mode='a', header=header, index=False)
+            results_batch = []
+
+    # Salva gli ultimi risultati rimasti
+    if results_batch:
+        print(f"Salvo ultimi {len(results_batch)} risultati su CSV...")
+        header = not os.path.exists(output_file)
+        pd.DataFrame(results_batch).to_excel(output_file, mode='a', header=header, index=False)
+
+    print("Processo completato.")
+
+if __name__ == "__main__":
+    main()
+

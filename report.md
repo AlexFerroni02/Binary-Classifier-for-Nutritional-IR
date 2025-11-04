@@ -67,4 +67,6 @@ For the implementation (Task 4), we will use the pre-trained model `microsoft/Bi
 
 [3] González-Carvajal, S., & Garrido-Merchán, E. C. (2021). Comparing BERT against traditional machine learning text classification. *arXiv preprint arXiv:2005.13012v2*.
 
+[4] Peng et al., 2019, BLURB: A Benchmark for Biomedical Language Understanding
+
 

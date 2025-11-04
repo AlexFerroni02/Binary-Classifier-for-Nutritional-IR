@@ -3,7 +3,7 @@ import pandas as pd
 import time
 
 # File di input
-df = pd.read_excel("../data/publications_with_abstracts.xlsx")
+df = pd.read_csv("../data/abstracts.csv")
 
 # Filtriamo i titoli con abstract mancante
 missing_df = df[df['abstract'].isna() | (df['abstract'].str.strip() == "")]
@@ -35,5 +35,4 @@ for idx, row in missing_df.iterrows():
     time.sleep(0.5)  # evita overload API
 
 # Salva un nuovo file Excel con tutti gli abstract
-df.to_excel("../data/publications_with_all_abstracts.xlsx", index=False)
-print("\n✅ File salvato come 'publications_with_all_abstracts.xlsx'")
+df.to_csv("../data/abstracts.csv", index=False)
