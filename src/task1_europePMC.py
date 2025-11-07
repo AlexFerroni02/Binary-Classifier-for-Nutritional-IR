@@ -25,7 +25,7 @@ for c in required:
 start = 0
 if os.path.exists(OUTPUT_FILE):
     prev = safe_read(OUTPUT_FILE)
-    if len(prev)==len(df):
+    if len(prev) == len(df):
         df = prev
         start = df["abstract"].notna().sum()
         print(f"Resuming at row {start}")
@@ -36,16 +36,9 @@ def crossref_doi(title):
     try:
         r = requests.get(url, params=p, timeout=10)
         items = r.json()["message"]["items"]
-        if not items: return None
+        if not items:
+            return None
         return items[0].get("DOI")
-    except:
-        return None
-
-def semantic_abstract(doi):
-    try:
-        url = f"https://api.semanticscholar.org/graph/v1/paper/DOI:{doi}?fields=abstract"
-        r = requests.get(url, timeout=10)
-        return r.json().get("abstract")
     except:
         return None
 
@@ -59,21 +52,22 @@ def openalex_abstract(doi):
 
 def europepmc_title(title):
     url = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
-    params = {"query": f'"{title}"', "format":"json", "pageSize":1}
+    params = {"query": f'"{title}"', "format": "json", "pageSize": 1}
     try:
         r = requests.get(url, params=params, timeout=10)
-        res = r.json().get("resultList",{}).get("result",[])
-        if not res: return None
+        res = r.json().get("resultList", {}).get("result", [])
+        if not res:
+            return None
         return res[0].get("abstractText")
     except:
         return None
 
 for i in range(start, len(df)):
-    title = str(df.at[i,"title"])
-    if pd.notna(df.at[i,"abstract"]) and df.at[i,"abstract"].strip():
+    title = str(df.at[i, "title"])
+    if pd.notna(df.at[i, "abstract"]) and df.at[i, "abstract"].strip():
         continue
 
-    print(f"\n{df.at[i,'indice']} — {title}")
+    print(f"\n{df.at[i, 'indice']} — {title}")
 
     # 1) DOI via CrossRef
     doi = crossref_doi(title)
@@ -81,7 +75,7 @@ for i in range(start, len(df)):
 
     abstract = None
     if doi:
-        abstract = semantic_abstract(doi) or openalex_abstract(doi)
+        abstract = openalex_abstract(doi)
 
     # fallback: EuropePMC
     if not abstract:
@@ -89,7 +83,7 @@ for i in range(start, len(df)):
 
     if abstract:
         print(" Abstract found")
-        df.at[i,"abstract"] = abstract
+        df.at[i, "abstract"] = abstract
     else:
         print("No abstract found")
 
