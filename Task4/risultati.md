@@ -1,8 +1,0 @@
-- Accuracy sul Test Set: 0.9922
-- F1-score sul Test Set: 0.9922
-- Precision sul Test Set: 1.0000
-- Recall sul Test Set: 0.9845
-- --- Ranking-based Metrics ---
-- MAP: 0.9999
-- MRR: 1.0000
-- nDCG: 1.0000
