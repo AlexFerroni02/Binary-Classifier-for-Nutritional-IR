@@ -82,7 +82,7 @@ def extract_abstract_from_xml(xml_text):
 
 def main():
     input_file = "../data/publications.xlsx"
-    output_file = "../data/abstracts.xlsx"
+    output_file = "../data/abstracts.csv"
     df = pd.read_excel(input_file)
 
     # Carica indici già processati se il file esiste
@@ -90,8 +90,8 @@ def main():
     if os.path.exists(output_file):
         try:
             df_existing = pd.read_csv(output_file)
-            processed_indices = set(df_existing['indice'])
-            print(f"Trovati {len(processed_indices)} articoli già processati.")
+            processed_indices = set(df_existing['abstract'])
+            print(f"Found {len(processed_indices)} already processed articles.")
         except Exception:
             pass
 
@@ -126,14 +126,14 @@ def main():
         if len(results_batch) >= save_interval:
             print(f"Salvo {len(results_batch)} risultati su CSV...")
             header = not os.path.exists(output_file)
-            pd.DataFrame(results_batch).to_excel(output_file, mode='a', header=header, index=False)
+            pd.DataFrame(results_batch).to_csv(output_file, header=header, index=False)
             results_batch = []
 
     # Salva gli ultimi risultati rimasti
     if results_batch:
         print(f"Salvo ultimi {len(results_batch)} risultati su CSV...")
         header = not os.path.exists(output_file)
-        pd.DataFrame(results_batch).to_excel(output_file, mode='a', header=header, index=False)
+        pd.DataFrame(results_batch).to_csv(output_file, header=header, index=False)
 
     print("Processo completato.")
 

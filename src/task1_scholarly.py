@@ -35,7 +35,7 @@ for i, row in df.iterrows():
         df.at[i, "abstract"] = ""
         print(" -> not found")
 
-    time.sleep(5)  # avoid rate-limiting
+    time.sleep(3)  
 
 df.to_csv(output_file, index=False)
 print("Done:", output_file)

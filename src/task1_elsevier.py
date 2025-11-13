@@ -6,9 +6,9 @@ import json
 import os
 
 # ---------------- CONFIGURATION ----------------
-API_KEY = "APIKEY"   
+API_KEY = ""   
 INPUT_FILE = "../data/abstracts.csv"
-OUTPUT_FILE = "../data/abstracts_filled.csv"
+OUTPUT_FILE = "../data/abstracts.csv"
 
 
 MAX_RETRIES = 3
@@ -120,8 +120,16 @@ def get_abstract_from_doi(doi):
                 time.sleep(2)
     return None
 
+def check_API_key(key):
+    if not key:
+        key = input("Paste your Scopus API key:\n").strip()
+    return key
+
+
 
 # ------------- MAIN FLOW ----------------
+
+API_KEY = check_API_key(API_KEY)
 
 df = pd.read_csv(INPUT_FILE)
 
@@ -173,4 +181,4 @@ for i in range(start_index, len(df)):
 
 
 print("\ndone.")
-print(f"Filled file → {OUTPUT_FILE}")
+print(f"Filled file {OUTPUT_FILE}")

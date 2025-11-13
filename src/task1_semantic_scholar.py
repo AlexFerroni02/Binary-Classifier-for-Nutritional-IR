@@ -2,8 +2,10 @@ import requests
 import pandas as pd
 import time
 
+INPUT = "../data/abstracts.csv"
+OUTPUT = "../data/abstracts.csv"
 # File di input
-df = pd.read_csv("../data/abstracts.csv")
+df = pd.read_csv(INPUT)
 
 # Filtriamo i titoli con abstract mancante
 missing_df = df[df['abstract'].isna() | (df['abstract'].str.strip() == "")]
@@ -14,7 +16,7 @@ semantic_scholar_url = "https://api.semanticscholar.org/graph/v1/paper/search"
 
 for idx, row in missing_df.iterrows():
     title = row['title']
-    print(f"\n🔎 Searching Semantic Scholar: {title}")
+    print(f"\n Searching Semantic Scholar: {title}")
 
     abstract_text = None
     try:
@@ -28,11 +30,9 @@ for idx, row in missing_df.iterrows():
     except Exception as e:
         print("Errore Semantic Scholar:", e)
 
-    # Aggiorniamo la cella
     if abstract_text:
         df.at[idx, "abstract"] = abstract_text
 
-    time.sleep(0.5)  # evita overload API
+    time.sleep(0.5)  
 
-# Salva un nuovo file Excel con tutti gli abstract
-df.to_csv("../data/abstracts.csv", index=False)
+df.to_csv(OUTPUT, index=False)

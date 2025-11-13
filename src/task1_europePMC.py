@@ -2,11 +2,11 @@ import pandas as pd
 import requests
 import time
 import csv
-import os
+import re
 
-INPUT_FILE = "../data/abstracts_filled.csv"
-OUTPUT_FILE = "../data/abstracts_filled.csv"
-SLEEP = 0.4
+INPUT_FILE = "../data/abstracts.csv"
+OUTPUT_FILE = "../data/abstracts.csv"
+SLEEP = 2
 
 def safe_read(path):
     try:
@@ -14,78 +14,79 @@ def safe_read(path):
     except:
         return pd.read_csv(path, on_bad_lines="skip")
 
-df = safe_read(INPUT_FILE)
+def sanitize_title(title):
+    return re.sub(r"[\n\r\t]+", " ", str(title)).strip()
 
-required = ["indice","title","abstract"]
+df = safe_read(INPUT_FILE)
+required = ["indice", "title", "abstract"]
 for c in required:
     if c not in df.columns:
-        raise ValueError(f"Column missing: {c}")
+        raise ValueError(f"Missing column: {c}")
 
-# resume
 start = 0
-if os.path.exists(OUTPUT_FILE):
-    prev = safe_read(OUTPUT_FILE)
-    if len(prev) == len(df):
-        df = prev
-        start = df["abstract"].notna().sum()
-        print(f"Resuming at row {start}")
 
 def crossref_doi(title):
     url = "https://api.crossref.org/works"
-    p = {"query.title": title, "rows": 1}
+    params = {"query.title": title, "rows": 1}
     try:
-        r = requests.get(url, params=p, timeout=10)
-        items = r.json()["message"]["items"]
+        r = requests.get(url, params=params, timeout=10)
+        r.raise_for_status()
+        items = r.json().get("message", {}).get("items", [])
         if not items:
             return None
         return items[0].get("DOI")
-    except:
+    except Exception as e:
+        print("Error CrossRef:", e)
         return None
 
-def openalex_abstract(doi):
-    try:
-        url = f"https://api.openalex.org/works/doi:{doi}"
-        r = requests.get(url, timeout=10)
-        return r.json().get("abstract")
-    except:
-        return None
-
-def europepmc_title(title):
+def europepmc_title(title, doi=None):
+    title = sanitize_title(title)
     url = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
-    params = {"query": f'"{title}"', "format": "json", "pageSize": 1}
-    try:
-        r = requests.get(url, params=params, timeout=10)
-        res = r.json().get("resultList", {}).get("result", [])
-        if not res:
-            return None
-        return res[0].get("abstractText")
-    except:
-        return None
+    
+    queries = []
+    if doi:
+        queries.append(f"DOI:{doi}")
+    queries.append(title) 
+    
+    for q in queries:
+        params = {"query": q, "format": "json", "pageSize": 1, "resulttype": "core"}
+        try:
+            r = requests.get(url, params=params, timeout=15)
+            r.raise_for_status()
+            data = r.json()
+            results = data.get("resultList", {}).get("result", [])
+            if not results:
+                continue
+            item = results[0]
+            abs_text = item.get("abstractText") or item.get("abstract")
+            if abs_text:
+                return abs_text
+        except Exception as e:
+            print(f"EuropePMC errore con query {q}:", e)
+    return None
 
 for i in range(start, len(df)):
-    title = str(df.at[i, "title"])
+    title = sanitize_title(df.at[i, "title"])
+    
     if pd.notna(df.at[i, "abstract"]) and df.at[i, "abstract"].strip():
         continue
 
     print(f"\n{df.at[i, 'indice']} — {title}")
 
-    # 1) DOI via CrossRef
     doi = crossref_doi(title)
-    print("DOI:", doi)
-
-    abstract = None
     if doi:
-        abstract = openalex_abstract(doi)
+        print("DOI found:", doi)
 
-    # fallback: EuropePMC
-    if not abstract:
-        abstract = europepmc_title(title)
+    abstract = europepmc_title(title, doi)
 
     if abstract:
-        print(" Abstract found")
+        print("Abstract found!")
         df.at[i, "abstract"] = abstract
     else:
-        print("No abstract found")
+        print("No abstract")
 
     df.to_csv(OUTPUT_FILE, index=False, quoting=csv.QUOTE_ALL, escapechar="\\")
+
     time.sleep(SLEEP)
+
+print("\nFile saved in ", OUTPUT_FILE)
